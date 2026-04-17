@@ -1,0 +1,917 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <title>売上管理｜間借り店舗</title>
+  <style>
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    html, body { margin: 0; padding: 0; background: #F4F7FD; }
+    input, textarea, select, button { font-family: -apple-system, 'Hiragino Sans', 'Noto Sans JP', sans-serif; }
+    input[type=number]::-webkit-inner-spin-button,
+    input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+    ::-webkit-scrollbar { width: 4px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #C2D3F0; border-radius: 2px; }
+  </style>
+</head>
+<body>
+<div id="root"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+
+<script type="text/babel">
+const { useState, useEffect, useCallback } = React;
+
+// ── カラーパレット ───────────────────────────────────────
+const C = {
+  navy:     "#1A3560",
+  navyMid:  "#2B50A0",
+  navyPale: "#EAF0FB",
+  navyBrd:  "#C2D3F0",
+  white:    "#FFFFFF",
+  bg:       "#F4F7FD",
+  muted:    "#607DB0",
+  border:   "#D0DCF0",
+  success:  "#1A6B45",
+  sucBg:    "#E6F4ED",
+  danger:   "#B71C1C",
+  danBg:    "#FDECEA",
+  warn:     "#C04E00",
+  warnBg:   "#FFF3E8",
+};
+
+// ── 定数 ────────────────────────────────────────────────
+const STORES   = ["楠木フサエ", "酒ナックめぐみ"];
+const WEATHERS = ["☀️ 晴れ", "⛅ 曇り", "🌧️ 雨"];
+const RENTALS  = [2000, 6000];
+
+const DEFAULT_DRINKS = [
+  { id: 1, name: "生ビール",         costPrice: 250, sellPrice: 600 },
+  { id: 2, name: "瓶ビール",         costPrice: 300, sellPrice: 700 },
+  { id: 3, name: "ハイボール",       costPrice: 150, sellPrice: 500 },
+  { id: 4, name: "日本酒（一合）",   costPrice: 350, sellPrice: 800 },
+  { id: 5, name: "焼酎（一杯）",     costPrice: 200, sellPrice: 500 },
+  { id: 6, name: "ワイン（グラス）", costPrice: 400, sellPrice: 800 },
+  { id: 7, name: "ソフトドリンク",   costPrice:  80, sellPrice: 300 },
+  { id: 8, name: "梅酒ロック",       costPrice: 200, sellPrice: 500 },
+];
+
+// ── ユーティリティ ───────────────────────────────────────
+const fmt   = (n) => `¥${Math.round(n).toLocaleString("ja-JP")}`;
+const today = () => new Date().toISOString().split("T")[0];
+
+const ls = {
+  get:    (k) => { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : null; } catch { return null; } },
+  set:    (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
+};
+
+// ── 共通スタイル ─────────────────────────────────────────
+const inp = {
+  width: "100%", padding: "12px 14px",
+  border: `1.5px solid ${C.border}`, borderRadius: 10,
+  fontSize: 15, color: C.navy, background: C.white,
+  boxSizing: "border-box", outline: "none",
+  WebkitAppearance: "none",
+};
+const lbl = {
+  display: "block", fontSize: 11, fontWeight: 700,
+  color: C.navyMid, marginBottom: 6, letterSpacing: "0.08em",
+  textTransform: "uppercase",
+};
+const card = {
+  background: C.white, border: `1.5px solid ${C.border}`,
+  borderRadius: 14, padding: "18px", marginBottom: 14,
+  boxShadow: "0 1px 4px rgba(26,53,96,0.06)",
+};
+const secHead = {
+  fontSize: 13, fontWeight: 800, color: C.navy,
+  marginBottom: 14, paddingBottom: 10,
+  borderBottom: `2px solid ${C.navyPale}`,
+  letterSpacing: "0.04em",
+};
+const primaryBtn = {
+  width: "100%", padding: "15px", background: C.navy,
+  color: C.white, border: "none", borderRadius: 12,
+  fontSize: 15, fontWeight: 700, cursor: "pointer",
+  letterSpacing: "0.06em",
+  boxShadow: "0 4px 14px rgba(26,53,96,0.28)",
+};
+const outlineBtn = (small) => ({
+  padding: small ? "7px 12px" : "11px 14px",
+  background: C.white, border: `1.5px solid ${C.border}`,
+  borderRadius: 8, color: C.navy, cursor: "pointer",
+  fontSize: small ? 12 : 14, fontWeight: 600,
+});
+const navyBtn = (small) => ({
+  padding: small ? "7px 12px" : "11px 14px",
+  background: C.navy, border: "none",
+  borderRadius: 8, color: C.white, cursor: "pointer",
+  fontSize: small ? 12 : 14, fontWeight: 600,
+});
+const paleBtn = (small) => ({
+  padding: small ? "7px 12px" : "11px 14px",
+  background: C.navyPale, border: "none",
+  borderRadius: 8, color: C.navy, cursor: "pointer",
+  fontSize: small ? 12 : 14, fontWeight: 600,
+});
+
+// ── 小コンポーネント ──────────────────────────────────────
+function Field({ label, children }) {
+  return (
+    <div style={{ marginBottom: 14 }}>
+      <label style={lbl}>{label}</label>
+      {children}
+    </div>
+  );
+}
+
+function Toggle({ options, value, onChange, fmtFn }) {
+  return (
+    <div style={{ display: "flex", gap: 8 }}>
+      {options.map((o) => (
+        <button key={String(o)} onClick={() => onChange(o)} style={{
+          flex: 1, padding: "11px 4px",
+          border: `1.5px solid ${value === o ? C.navy : C.border}`,
+          borderRadius: 10, background: value === o ? C.navy : C.white,
+          color: value === o ? C.white : C.navy,
+          fontWeight: 700, cursor: "pointer",
+          fontSize: 13, transition: "all 0.15s",
+        }}>
+          {fmtFn ? fmtFn(o) : o}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function SummaryRow({ label, value, color, large }) {
+  return (
+    <div style={{
+      display: "flex", justifyContent: "space-between",
+      alignItems: "center", padding: "8px 0",
+      borderBottom: `1px solid ${C.border}`,
+    }}>
+      <span style={{ fontSize: large ? 14 : 13, color: color || C.muted }}>{label}</span>
+      <span style={{ fontSize: large ? 16 : 14, fontWeight: large ? 800 : 600, color: color || C.navy }}>
+        {value}
+      </span>
+    </div>
+  );
+}
+
+// ── 日報タブ ──────────────────────────────────────────────
+function ReportTab({ form, setForm, drinks, onSubmit }) {
+  const fc = (k, v) => setForm(p => ({ ...p, [k]: v }));
+  const setDrink = (id, qty) => fc("drinkOrders", { ...form.drinkOrders, [id]: Math.max(0, qty) });
+
+  const drinkSales = drinks.reduce((s, d) => s + d.sellPrice * (form.drinkOrders[d.id] || 0), 0);
+  const drinkFee   = drinks.reduce((s, d) => s + d.costPrice * 1.2 * (form.drinkOrders[d.id] || 0), 0);
+  const foodSales  = parseFloat(form.foodSales) || 0;
+  const totalSales = foodSales + drinkSales;
+  const matCost    = parseFloat(form.materialCost) || 0;
+  const totalExp   = form.rentalFee + matCost + drinkFee;
+  const netProfit  = totalSales - totalExp;
+  const customers  = parseInt(form.customers) || 0;
+  const avgPer     = customers && totalSales ? Math.round(totalSales / customers) : 0;
+  const profitPos  = netProfit >= 0;
+
+  return (
+    <div>
+      {/* 基本情報 */}
+      <div style={card}>
+        <div style={secHead}>📅　基本情報</div>
+        <Field label="日付">
+          <input type="date" value={form.date} onChange={e => fc("date", e.target.value)} style={inp} />
+        </Field>
+        <Field label="店舗">
+          <Toggle options={STORES} value={form.store} onChange={v => fc("store", v)} />
+        </Field>
+        <Field label="天気">
+          <Toggle options={WEATHERS} value={form.weather} onChange={v => fc("weather", v)} />
+        </Field>
+        <Field label="客数">
+          <input type="number" inputMode="numeric" value={form.customers}
+            onChange={e => fc("customers", e.target.value)} placeholder="0" style={inp} />
+        </Field>
+      </div>
+
+      {/* 売上 */}
+      <div style={card}>
+        <div style={secHead}>💴　売上入力</div>
+        <Field label="食事売上（ドリンク除く）¥">
+          <input type="number" inputMode="numeric" value={form.foodSales}
+            onChange={e => fc("foodSales", e.target.value)} placeholder="0" style={inp} />
+        </Field>
+
+        <label style={lbl}>ドリンク注文数</label>
+        <div style={{ border: `1.5px solid ${C.border}`, borderRadius: 10, overflow: "hidden", marginBottom: 14 }}>
+          {drinks.map((d, i) => {
+            const qty = form.drinkOrders[d.id] || 0;
+            return (
+              <div key={d.id} style={{
+                display: "flex", alignItems: "center", padding: "11px 14px",
+                borderBottom: i < drinks.length - 1 ? `1px solid ${C.border}` : "none",
+                background: i % 2 === 0 ? C.white : C.bg,
+              }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: C.navy, lineHeight: 1.3 }}>{d.name}</div>
+                  <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>
+                    売価 ¥{d.sellPrice.toLocaleString()} ／ 使用料 ¥{Math.round(d.costPrice * 1.2).toLocaleString()}
+                  </div>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 14, flexShrink: 0 }}>
+                  <button onClick={() => setDrink(d.id, qty - 1)} style={{
+                    width: 36, height: 36, borderRadius: "50%",
+                    border: `1.5px solid ${C.border}`, background: C.white,
+                    color: C.navy, fontSize: 22, cursor: "pointer",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    flexShrink: 0, lineHeight: 1,
+                  }}>−</button>
+                  <span style={{ fontSize: 17, fontWeight: 800, color: C.navy, minWidth: 24, textAlign: "center" }}>
+                    {qty}
+                  </span>
+                  <button onClick={() => setDrink(d.id, qty + 1)} style={{
+                    width: 36, height: 36, borderRadius: "50%",
+                    border: `1.5px solid ${C.navy}`, background: C.navy,
+                    color: C.white, fontSize: 22, cursor: "pointer",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    flexShrink: 0, lineHeight: 1,
+                  }}>+</button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* 売上サマリー */}
+        <div style={{ background: C.navyPale, borderRadius: 10, padding: "14px" }}>
+          <SummaryRow label="食事売上" value={fmt(foodSales)} />
+          <SummaryRow label="ドリンク売上" value={fmt(drinkSales)} />
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", paddingTop: 10 }}>
+            <span style={{ fontSize: 15, fontWeight: 800, color: C.navy }}>総売上</span>
+            <span style={{ fontSize: 22, fontWeight: 900, color: C.navy }}>{fmt(totalSales)}</span>
+          </div>
+          {customers > 0 && (
+            <div style={{ fontSize: 12, color: C.muted, textAlign: "right", marginTop: 2 }}>
+              客単価 {fmt(avgPer)}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* 経費 */}
+      <div style={card}>
+        <div style={secHead}>💸　経費入力</div>
+        <Field label="間借り費用">
+          <Toggle options={RENTALS} value={form.rentalFee} onChange={v => fc("rentalFee", v)}
+            fmtFn={v => `¥${v.toLocaleString()}`} />
+        </Field>
+        <Field label="材料費 ¥">
+          <input type="number" inputMode="numeric" value={form.materialCost}
+            onChange={e => fc("materialCost", e.target.value)} placeholder="0" style={inp} />
+        </Field>
+
+        <div style={{ background: C.warnBg, borderRadius: 10, padding: "14px", border: `1px solid #F5C9A0` }}>
+          <SummaryRow label="間借り費用" value={fmt(form.rentalFee)} color={C.warn} />
+          <SummaryRow label="材料費" value={fmt(matCost)} color={C.warn} />
+          <SummaryRow label="ドリンク使用料" value={fmt(drinkFee)} color={C.warn} />
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", paddingTop: 10 }}>
+            <span style={{ fontSize: 15, fontWeight: 800, color: C.warn }}>総経費</span>
+            <span style={{ fontSize: 22, fontWeight: 900, color: C.warn }}>{fmt(totalExp)}</span>
+          </div>
+        </div>
+      </div>
+
+      {/* 純利益 */}
+      <div style={{
+        background: profitPos ? C.sucBg : C.danBg,
+        border: `2px solid ${profitPos ? "#80C8A0" : "#EE9090"}`,
+        borderRadius: 14, padding: "20px 18px", marginBottom: 14, textAlign: "center",
+      }}>
+        <div style={{ fontSize: 12, fontWeight: 700, color: profitPos ? C.success : C.danger, marginBottom: 6, letterSpacing: "0.08em" }}>
+          純　利　益
+        </div>
+        <div style={{ fontSize: 36, fontWeight: 900, color: profitPos ? C.success : C.danger, letterSpacing: "-0.02em" }}>
+          {netProfit >= 0 ? "+" : ""}{fmt(netProfit)}
+        </div>
+        {customers > 0 && (
+          <div style={{ fontSize: 12, color: profitPos ? "#2E7D32" : C.danger, marginTop: 6 }}>
+            客数 {customers}名 ／ 客単価 {fmt(avgPer)}
+          </div>
+        )}
+      </div>
+
+      {/* メモ */}
+      <div style={card}>
+        <div style={secHead}>📝　メモ・気づき</div>
+        <textarea value={form.notes} onChange={e => fc("notes", e.target.value)}
+          placeholder="気づいたことや特記事項をメモ..." rows={3}
+          style={{ ...inp, resize: "vertical" }} />
+      </div>
+
+      <button onClick={() => onSubmit({ drinkSales, drinkFee, totalSales, totalExp, netProfit, avgPer })}
+        style={primaryBtn}>
+        💾　日報を保存する
+      </button>
+      <div style={{ height: 20 }} />
+    </div>
+  );
+}
+
+// ── 履歴タブ ──────────────────────────────────────────────
+function HistoryTab({ reports, drinks }) {
+  const [sel, setSel] = useState(null);
+  const [filterStore, setFilterStore] = useState("all");
+
+  if (sel) {
+    const r = sel;
+    const profitPos = r.netProfit >= 0;
+    return (
+      <div>
+        <button onClick={() => setSel(null)} style={{
+          background: "none", border: "none", color: C.navy,
+          cursor: "pointer", fontSize: 14, padding: "0 0 16px",
+          display: "block", fontWeight: 600,
+        }}>← 一覧に戻る</button>
+
+        <div style={{ ...card, background: profitPos ? C.sucBg : C.danBg, border: `1.5px solid ${profitPos ? "#80C8A0" : "#EE9090"}` }}>
+          <div style={{ textAlign: "center" }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: profitPos ? C.success : C.danger }}>{r.date} ／ {r.store}</div>
+            <div style={{ fontSize: 30, fontWeight: 900, color: profitPos ? C.success : C.danger, margin: "6px 0 2px" }}>
+              {r.netProfit >= 0 ? "+" : ""}{fmt(r.netProfit)}
+            </div>
+            <div style={{ fontSize: 12, color: profitPos ? "#2E7D32" : C.danger }}>
+              {r.weather} ／ {r.customers}名 ／ 客単価 {fmt(r.avgPer)}
+            </div>
+          </div>
+        </div>
+
+        <div style={card}>
+          <div style={secHead}>売上内訳</div>
+          <SummaryRow label="食事売上" value={fmt(r.foodSales)} />
+          <SummaryRow label="ドリンク売上" value={fmt(r.drinkSales)} />
+          <SummaryRow label="総売上" value={fmt(r.totalSales)} color={C.navy} large />
+        </div>
+
+        <div style={card}>
+          <div style={secHead}>経費内訳</div>
+          <SummaryRow label="間借り費用" value={fmt(r.rentalFee)} />
+          <SummaryRow label="材料費" value={fmt(r.materialCost)} />
+          <SummaryRow label="ドリンク使用料" value={fmt(r.drinkFee)} />
+          <SummaryRow label="総経費" value={fmt(r.totalExp)} color={C.warn} large />
+        </div>
+
+        {Object.entries(r.drinkOrders || {}).some(([, q]) => q > 0) && (
+          <div style={card}>
+            <div style={secHead}>🍺 ドリンク内訳</div>
+            {Object.entries(r.drinkOrders).filter(([, q]) => q > 0).map(([id, qty]) => {
+              const d = drinks.find(x => String(x.id) === String(id));
+              if (!d) return null;
+              return (
+                <div key={id} style={{ padding: "8px 0", borderBottom: `1px solid ${C.border}` }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, fontWeight: 600, color: C.navy }}>
+                    <span>{d.name} × {qty}</span>
+                    <span>売上 {fmt(d.sellPrice * qty)}</span>
+                  </div>
+                  <div style={{ fontSize: 11, color: C.muted, textAlign: "right", marginTop: 2 }}>
+                    使用料 {fmt(d.costPrice * 1.2 * qty)}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {r.notes ? (
+          <div style={card}>
+            <div style={secHead}>📝 メモ</div>
+            <p style={{ margin: 0, fontSize: 14, color: C.navy, lineHeight: 1.8, whiteSpace: "pre-wrap" }}>{r.notes}</p>
+          </div>
+        ) : null}
+      </div>
+    );
+  }
+
+  // 月別サマリー
+  const filtered = filterStore === "all" ? reports : reports.filter(r => r.store === filterStore);
+  const byMonth = {};
+  filtered.forEach(r => {
+    const m = r.date.slice(0, 7);
+    if (!byMonth[m]) byMonth[m] = { sales: 0, exp: 0, profit: 0, count: 0 };
+    byMonth[m].sales  += r.totalSales;
+    byMonth[m].exp    += r.totalExp;
+    byMonth[m].profit += r.netProfit;
+    byMonth[m].count  += 1;
+  });
+  const latestMonth = Object.keys(byMonth).sort().reverse()[0];
+
+  return (
+    <div>
+      {/* フィルター */}
+      <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+        {["all", ...STORES].map(s => (
+          <button key={s} onClick={() => setFilterStore(s)} style={{
+            flex: 1, padding: "9px 4px",
+            border: `1.5px solid ${filterStore === s ? C.navy : C.border}`,
+            borderRadius: 8, background: filterStore === s ? C.navy : C.white,
+            color: filterStore === s ? C.white : C.navy,
+            fontWeight: 600, cursor: "pointer", fontSize: 11,
+          }}>{s === "all" ? "全店舗" : s}</button>
+        ))}
+      </div>
+
+      {/* 月次サマリー */}
+      {latestMonth && (
+        <div style={{ ...card, background: C.navyPale, borderColor: C.navyBrd }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: C.muted, marginBottom: 8 }}>
+            {latestMonth}　月次サマリー（{byMonth[latestMonth].count}日）
+          </div>
+          <div style={{ display: "flex", gap: 8 }}>
+            {[["売上", fmt(byMonth[latestMonth].sales), C.navy],
+              ["経費", fmt(byMonth[latestMonth].exp), C.warn],
+              ["利益", fmt(byMonth[latestMonth].profit), byMonth[latestMonth].profit >= 0 ? C.success : C.danger]
+            ].map(([l, v, c]) => (
+              <div key={l} style={{ flex: 1, background: C.white, borderRadius: 8, padding: "8px 10px", border: `1px solid ${C.border}` }}>
+                <div style={{ fontSize: 10, color: C.muted }}>{l}</div>
+                <div style={{ fontSize: 13, fontWeight: 800, color: c, marginTop: 2 }}>{v}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div style={{ fontSize: 13, color: C.muted, marginBottom: 12 }}>全 {filtered.length} 件</div>
+
+      {filtered.length === 0 ? (
+        <div style={{ textAlign: "center", color: C.muted, padding: "56px 20px", fontSize: 14 }}>
+          日報がまだありません
+        </div>
+      ) : filtered.map(r => (
+        <div key={r.id} onClick={() => setSel(r)} style={{ ...card, cursor: "pointer", WebkitTapHighlightColor: "transparent" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 }}>
+            <div>
+              <div style={{ fontWeight: 800, color: C.navy, fontSize: 16 }}>{r.date}</div>
+              <div style={{ fontSize: 12, color: C.muted, marginTop: 3 }}>
+                {r.store} ／ {r.weather} ／ {r.customers}名
+              </div>
+            </div>
+            <div style={{ textAlign: "right" }}>
+              <div style={{ fontWeight: 800, fontSize: 18, color: r.netProfit >= 0 ? C.success : C.danger }}>
+                {r.netProfit >= 0 ? "+" : ""}{fmt(r.netProfit)}
+              </div>
+              <div style={{ fontSize: 10, color: C.muted }}>純利益</div>
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: 8 }}>
+            {[["総売上", fmt(r.totalSales), C.navyPale, C.navy],
+              ["総経費", fmt(r.totalExp), C.warnBg, C.warn]
+            ].map(([l, v, bg, tc]) => (
+              <div key={l} style={{ flex: 1, background: bg, borderRadius: 8, padding: "8px 10px" }}>
+                <div style={{ fontSize: 10, color: C.muted }}>{l}</div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: tc }}>{v}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ── ドリンクマスタータブ ──────────────────────────────────
+function DrinkTab({ drinks, onSave, showToast, sheetsUrl }) {
+  const [editing, setEditing] = useState(null);
+  const [showAdd, setShowAdd] = useState(false);
+  const [newD, setNewD] = useState({ name: "", costPrice: "", sellPrice: "" });
+  const [editD, setEditD] = useState({});
+  const [syncing, setSyncing] = useState(false);
+
+  const startEdit = (d) => { setEditing(d.id); setEditD({ ...d }); };
+
+  const commitEdit = () => {
+    onSave(drinks.map(x => x.id === editD.id ? { ...editD, costPrice: +editD.costPrice, sellPrice: +editD.sellPrice } : x));
+    setEditing(null); showToast("✅ 更新しました");
+  };
+
+  const addDrink = () => {
+    if (!newD.name || !newD.costPrice || !newD.sellPrice) { showToast("⚠️ 全項目を入力してください"); return; }
+    onSave([...drinks, { id: Date.now(), name: newD.name, costPrice: +newD.costPrice, sellPrice: +newD.sellPrice }]);
+    setNewD({ name: "", costPrice: "", sellPrice: "" }); setShowAdd(false); showToast("✅ 追加しました");
+  };
+
+  const syncFromSheets = async () => {
+    if (!sheetsUrl) { showToast("⚠️ 設定タブでURLを登録してください"); return; }
+    setSyncing(true);
+    try {
+      const res = await fetch(sheetsUrl + "?action=getDrinks");
+      const data = await res.json();
+      if (data.drinks && Array.isArray(data.drinks)) {
+        onSave(data.drinks);
+        showToast(`✅ ${data.drinks.length}件を読み込みました`);
+      } else {
+        showToast("⚠️ データの取得に失敗しました");
+      }
+    } catch {
+      showToast("⚠️ 同期に失敗しました");
+    }
+    setSyncing(false);
+  };
+
+  return (
+    <div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+        <div style={{ fontSize: 13, color: C.muted, fontWeight: 600 }}>ドリンクマスター {drinks.length}件</div>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button onClick={syncFromSheets} disabled={syncing} style={{ ...paleBtn(true), opacity: syncing ? 0.6 : 1 }}>
+            {syncing ? "同期中..." : "📊 スプレッドシートから読込"}
+          </button>
+          <button onClick={() => setShowAdd(!showAdd)} style={navyBtn(true)}>＋ 追加</button>
+        </div>
+      </div>
+
+      {showAdd && (
+        <div style={{ ...card, background: C.navyPale, borderColor: C.navyBrd }}>
+          <div style={secHead}>新規ドリンク追加</div>
+          <Field label="ドリンク名">
+            <input value={newD.name} onChange={e => setNewD(p => ({ ...p, name: e.target.value }))}
+              placeholder="例: 生ビール" style={inp} />
+          </Field>
+          <div style={{ display: "flex", gap: 8 }}>
+            <div style={{ flex: 1 }}>
+              <Field label="原価 ¥">
+                <input type="number" inputMode="numeric" value={newD.costPrice}
+                  onChange={e => setNewD(p => ({ ...p, costPrice: e.target.value }))} placeholder="0" style={inp} />
+              </Field>
+            </div>
+            <div style={{ flex: 1 }}>
+              <Field label="売価 ¥">
+                <input type="number" inputMode="numeric" value={newD.sellPrice}
+                  onChange={e => setNewD(p => ({ ...p, sellPrice: e.target.value }))} placeholder="0" style={inp} />
+              </Field>
+            </div>
+          </div>
+          {newD.costPrice && (
+            <div style={{ fontSize: 12, color: C.muted, marginBottom: 12 }}>
+              使用料（原価×1.2）: ¥{Math.round(+newD.costPrice * 1.2).toLocaleString()}
+            </div>
+          )}
+          <div style={{ display: "flex", gap: 8 }}>
+            <button onClick={addDrink} style={{ ...navyBtn(), flex: 1 }}>追加する</button>
+            <button onClick={() => setShowAdd(false)} style={{ ...outlineBtn(), flex: 1 }}>キャンセル</button>
+          </div>
+        </div>
+      )}
+
+      {drinks.map((d) => (
+        <div key={d.id} style={card}>
+          {editing === d.id ? (
+            <div>
+              <Field label="ドリンク名">
+                <input value={editD.name} onChange={e => setEditD(p => ({ ...p, name: e.target.value }))} style={inp} />
+              </Field>
+              <div style={{ display: "flex", gap: 8 }}>
+                <div style={{ flex: 1 }}>
+                  <Field label="原価 ¥">
+                    <input type="number" value={editD.costPrice}
+                      onChange={e => setEditD(p => ({ ...p, costPrice: e.target.value }))} style={inp} />
+                  </Field>
+                </div>
+                <div style={{ flex: 1 }}>
+                  <Field label="売価 ¥">
+                    <input type="number" value={editD.sellPrice}
+                      onChange={e => setEditD(p => ({ ...p, sellPrice: e.target.value }))} style={inp} />
+                  </Field>
+                </div>
+              </div>
+              <div style={{ fontSize: 12, color: C.muted, marginBottom: 12 }}>
+                使用料: ¥{Math.round((+editD.costPrice || 0) * 1.2).toLocaleString()}
+              </div>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button onClick={commitEdit} style={{ ...navyBtn(), flex: 1 }}>保存</button>
+                <button onClick={() => setEditing(null)} style={{ ...outlineBtn(), flex: 1 }}>キャンセル</button>
+              </div>
+            </div>
+          ) : (
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontWeight: 700, color: C.navy, fontSize: 15 }}>{d.name}</div>
+                <div style={{ fontSize: 11, color: C.muted, marginTop: 3 }}>
+                  原価 ¥{d.costPrice.toLocaleString()} ／ 売価 ¥{d.sellPrice.toLocaleString()} ／ 使用料 ¥{Math.round(d.costPrice * 1.2).toLocaleString()}
+                </div>
+              </div>
+              <div style={{ display: "flex", gap: 6, flexShrink: 0, marginLeft: 10 }}>
+                <button onClick={() => startEdit(d)} style={paleBtn(true)}>編集</button>
+                <button onClick={() => { onSave(drinks.filter(x => x.id !== d.id)); showToast("削除しました"); }}
+                  style={{ ...paleBtn(true), background: "#FDECEA", color: C.danger }}>削除</button>
+              </div>
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ── 設定タブ ──────────────────────────────────────────────
+function SettingsTab({ sheetsUrl, setSheetsUrl, showToast }) {
+  const [url, setUrl] = useState(sheetsUrl);
+
+  const GAS = `// ===== Google Apps Script コード =====
+// スプレッドシートの「拡張機能」→「Apps Script」に貼り付けてください
+
+function doPost(e) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const data = JSON.parse(e.postData.contents);
+
+  // 日報シートに保存
+  let sheet = ss.getSheetByName("日報");
+  if (!sheet) {
+    sheet = ss.insertSheet("日報");
+    sheet.appendRow(["日付","天気","店舗","客数","客単価",
+      "食事売上","ドリンク売上","総売上",
+      "間借り費用","材料費","ドリンク使用料","総経費",
+      "純利益","メモ","登録日時"]);
+    // ヘッダー行を固定・装飾
+    sheet.setFrozenRows(1);
+    sheet.getRange(1,1,1,15).setBackground("#1A3560").setFontColor("#FFFFFF").setFontWeight("bold");
+  }
+  sheet.appendRow([
+    data.date, data.weather, data.store, data.customers, data.avgPer,
+    data.foodSales, data.drinkSales, data.totalSales,
+    data.rentalFee, data.materialCost, data.drinkFee, data.totalExp,
+    data.netProfit, data.notes, data.createdAt
+  ]);
+
+  return ContentService
+    .createTextOutput(JSON.stringify({ status: "ok" }))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+function doGet(e) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const action = e.parameter.action;
+
+  // ドリンクマスター取得
+  if (action === "getDrinks") {
+    const sheet = ss.getSheetByName("ドリンクマスター");
+    if (!sheet) {
+      return ContentService
+        .createTextOutput(JSON.stringify({ error: "ドリンクマスターシートが見つかりません" }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+    const rows = sheet.getDataRange().getValues();
+    // 1行目はヘッダー（id, name, costPrice, sellPrice）
+    const drinks = rows.slice(1).map(r => ({
+      id:        r[0],
+      name:      r[1],
+      costPrice: Number(r[2]),
+      sellPrice: Number(r[3])
+    })).filter(d => d.name);
+
+    return ContentService
+      .createTextOutput(JSON.stringify({ drinks }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+
+  return ContentService
+    .createTextOutput(JSON.stringify({ status: "ok" }))
+    .setMimeType(ContentService.MimeType.JSON);
+}`;
+
+  const saveUrl = () => {
+    setSheetsUrl(url);
+    ls.set("sheetsUrl", url);
+    showToast("✅ 設定を保存しました");
+  };
+
+  const copyCode = () => {
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(GAS).then(() => showToast("✅ コードをコピーしました"));
+    } else {
+      showToast("コードを長押しでコピーしてください");
+    }
+  };
+
+  return (
+    <div>
+      <div style={card}>
+        <div style={secHead}>📊　Googleスプレッドシート連携</div>
+        <Field label="Google Apps Script URL">
+          <input value={url} onChange={e => setUrl(e.target.value)}
+            placeholder="https://script.google.com/macros/s/..." style={{ ...inp, fontSize: 12 }} />
+        </Field>
+        <button onClick={saveUrl} style={{ ...navyBtn(), width: "100%", padding: "12px" }}>保存する</button>
+      </div>
+
+      <div style={card}>
+        <div style={secHead}>🔧　スプレッドシート設定手順</div>
+        <ol style={{ margin: 0, paddingLeft: 20, fontSize: 13, color: C.navy, lineHeight: 2.4 }}>
+          <li>Googleスプレッドシートを新規作成</li>
+          <li>「拡張機能」→「Apps Script」を開く</li>
+          <li>下のコードをコピーして全文貼り付け</li>
+          <li>保存（Ctrl+S）</li>
+          <li>「デプロイ」→「新しいデプロイ」を選択</li>
+          <li>種類：<strong>「ウェブアプリ」</strong>を選択</li>
+          <li>アクセス：<strong>「全員」</strong>に変更してデプロイ</li>
+          <li>表示されたURLをこのページの上欄に貼り付けて保存</li>
+        </ol>
+      </div>
+
+      <div style={card}>
+        <div style={secHead}>📋　Apps Script コード</div>
+        <div style={{
+          background: "#0D1117", borderRadius: 10, padding: 14,
+          overflowX: "auto", fontSize: 10.5, color: "#E6EDF3",
+          fontFamily: "'Courier New', Courier, monospace",
+          lineHeight: 1.8, whiteSpace: "pre", maxHeight: 300, overflowY: "scroll",
+        }}>{GAS}</div>
+        <button onClick={copyCode} style={{ ...paleBtn(), width: "100%", padding: "11px", marginTop: 10, fontSize: 13 }}>
+          📋 コードをコピー
+        </button>
+      </div>
+
+      <div style={{ ...card, background: "#FFF8E8", borderColor: "#F5C9A0" }}>
+        <div style={{ fontSize: 12, color: C.warn, fontWeight: 700, marginBottom: 8 }}>
+          🍺　ドリンクマスターをスプレッドシートで管理する場合
+        </div>
+        <div style={{ fontSize: 12, color: C.navy, lineHeight: 1.9 }}>
+          スプレッドシートに「<strong>ドリンクマスター</strong>」という名前のシートを追加し、<br/>
+          以下の形式で1行目にヘッダーを入力してください：<br/><br/>
+          <code style={{ background: C.navyPale, padding: "2px 6px", borderRadius: 4, fontSize: 11 }}>
+            id ／ name ／ costPrice ／ sellPrice
+          </code><br/><br/>
+          2行目以降にドリンクデータを入力後、ドリンクタブの<br/>
+          「📊 スプレッドシートから読込」ボタンで同期できます。
+        </div>
+      </div>
+
+      <div style={{ ...card, background: C.navyPale, borderColor: C.navyBrd }}>
+        <div style={{ fontSize: 12, color: C.muted, lineHeight: 1.9 }}>
+          <strong style={{ color: C.navy }}>ℹ️ データ保存について</strong><br />
+          入力データはこのブラウザ（localStorage）に自動保存されます。<br />
+          端末・ブラウザが変わるとデータは引き継がれません。<br />
+          Googleスプレッドシート連携を設定すると、<br />
+          日報保存時に自動でシートにも書き込まれます。<br /><br />
+          <strong style={{ color: C.navy }}>🔒 アクセスについて</strong><br />
+          このURLを知っている方はどなたでも利用できます。<br />
+          パスワード・ログインは不要です。
+        </div>
+      </div>
+      <div style={{ height: 20 }} />
+    </div>
+  );
+}
+
+// ── メインアプリ ──────────────────────────────────────────
+function App() {
+  const [tab, setTab]             = useState("report");
+  const [drinks, setDrinks]       = useState(DEFAULT_DRINKS);
+  const [reports, setReports]     = useState([]);
+  const [sheetsUrl, setSheetsUrl] = useState("");
+  const [loading, setLoading]     = useState(true);
+  const [toast, setToast]         = useState("");
+
+  const [form, setForm] = useState({
+    date: today(), weather: WEATHERS[0], store: STORES[0],
+    customers: "", foodSales: "", rentalFee: 2000,
+    materialCost: "", drinkOrders: {}, notes: "",
+  });
+
+  useEffect(() => {
+    const savedReports  = ls.get("reports");
+    const savedDrinks   = ls.get("drinks");
+    const savedUrl      = ls.get("sheetsUrl");
+    if (savedReports)  setReports(savedReports);
+    if (savedDrinks)   setDrinks(savedDrinks);
+    if (savedUrl)      setSheetsUrl(savedUrl);
+    setLoading(false);
+  }, []);
+
+  const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(""), 3200); };
+
+  const saveDrinks = (d) => {
+    setDrinks(d);
+    ls.set("drinks", d);
+  };
+
+  const handleSubmit = async (computed) => {
+    if (!form.customers) { showToast("⚠️ 客数を入力してください"); return; }
+    const r = {
+      id: Date.now(),
+      date: form.date, weather: form.weather, store: form.store,
+      customers: +form.customers, avgPer: computed.avgPer,
+      foodSales: +form.foodSales || 0,
+      drinkSales: Math.round(computed.drinkSales),
+      totalSales: Math.round(computed.totalSales),
+      netProfit:  Math.round(computed.netProfit),
+      rentalFee: form.rentalFee, materialCost: +form.materialCost || 0,
+      drinkFee:  Math.round(computed.drinkFee),
+      totalExp:  Math.round(computed.totalExp),
+      drinkOrders: form.drinkOrders, notes: form.notes,
+      createdAt: new Date().toISOString(),
+    };
+    const next = [r, ...reports];
+    setReports(next);
+    ls.set("reports", next);
+
+    if (sheetsUrl) {
+      try {
+        fetch(sheetsUrl, { method: "POST", mode: "no-cors", body: JSON.stringify(r),
+          headers: { "Content-Type": "application/json" } });
+      } catch {}
+    }
+
+    showToast("✅ 日報を保存しました");
+    setForm({
+      date: today(), weather: WEATHERS[0], store: STORES[0],
+      customers: "", foodSales: "", rentalFee: 2000,
+      materialCost: "", drinkOrders: {}, notes: "",
+    });
+  };
+
+  const TABS = [
+    ["report",   "📝", "日報"],
+    ["history",  "📋", "履歴"],
+    ["drinks",   "🍺", "ドリンク"],
+    ["settings", "⚙️", "設定"],
+  ];
+
+  if (loading) return (
+    <div style={{ display: "flex", justifyContent: "center", alignItems: "center",
+      height: "100vh", color: C.navy, fontSize: 16 }}>
+      読み込み中...
+    </div>
+  );
+
+  return (
+    <div style={{
+      fontFamily: "-apple-system,'Hiragino Sans','Noto Sans JP',sans-serif",
+      background: C.bg, minHeight: "100vh",
+      maxWidth: 500, margin: "0 auto", paddingBottom: 90,
+    }}>
+
+      {/* トースト */}
+      {toast && (
+        <div style={{
+          position: "fixed", top: 24, left: "50%", transform: "translateX(-50%)",
+          background: C.navy, color: C.white, padding: "12px 24px", borderRadius: 28,
+          fontSize: 14, fontWeight: 600, zIndex: 9999,
+          boxShadow: "0 6px 24px rgba(26,53,96,0.38)", whiteSpace: "nowrap",
+          maxWidth: "90vw", textAlign: "center",
+        }}>{toast}</div>
+      )}
+
+      {/* ヘッダー */}
+      <div style={{
+        background: C.navy, color: C.white, padding: "20px 20px 16px",
+        position: "sticky", top: 0, zIndex: 50,
+        boxShadow: "0 2px 12px rgba(26,53,96,0.28)",
+      }}>
+        <div style={{ fontSize: 21, fontWeight: 900, letterSpacing: "0.02em" }}>📊 売上管理</div>
+        <div style={{ fontSize: 12, opacity: 0.65, marginTop: 3, fontWeight: 500 }}>
+          間借り店舗 日次報告システム
+        </div>
+      </div>
+
+      {/* タブバー */}
+      <div style={{
+        display: "flex", background: C.white,
+        borderBottom: `2px solid ${C.border}`,
+        position: "sticky", top: 73, zIndex: 40,
+      }}>
+        {TABS.map(([k, icon, label]) => (
+          <button key={k} onClick={() => setTab(k)} style={{
+            flex: 1, padding: "10px 2px 9px", border: "none", background: "none",
+            color: tab === k ? C.navy : C.muted,
+            fontWeight: tab === k ? 800 : 500,
+            borderBottom: `3px solid ${tab === k ? C.navy : "transparent"}`,
+            cursor: "pointer", fontSize: 10, lineHeight: 1.5,
+            transition: "all 0.15s",
+          }}>
+            <div style={{ fontSize: 18 }}>{icon}</div>
+            <div>{label}</div>
+          </button>
+        ))}
+      </div>
+
+      {/* コンテンツ */}
+      <div style={{ padding: "14px 14px 0" }}>
+        {tab === "report"   && <ReportTab form={form} setForm={setForm} drinks={drinks} onSubmit={handleSubmit} />}
+        {tab === "history"  && <HistoryTab reports={reports} drinks={drinks} />}
+        {tab === "drinks"   && <DrinkTab drinks={drinks} onSave={saveDrinks} showToast={showToast} sheetsUrl={sheetsUrl} />}
+        {tab === "settings" && <SettingsTab sheetsUrl={sheetsUrl} setSheetsUrl={setSheetsUrl} showToast={showToast} />}
+      </div>
+    </div>
+  );
+}
+
+const root = ReactDOM.createRoot(document.getElementById("root"));
+root.render(React.createElement(App));
+</script>
+</body>
+</html>
